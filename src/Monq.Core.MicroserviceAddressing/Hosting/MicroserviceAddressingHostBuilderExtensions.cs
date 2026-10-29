@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Monq.Core.MicroserviceAddressing.Addressing;
 using Monq.Core.MicroserviceAddressing.DependencyInjection;
