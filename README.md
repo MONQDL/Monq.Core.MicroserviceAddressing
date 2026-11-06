@@ -28,7 +28,7 @@ builder.Services.AddMicroserviceAddressing();
 HTTP and gRPC can use different policies:
 
 ```csharp
-builder.Host
+builder.Services
     .UseHttpMicroserviceAddressResolver(
         new KubernetesClusterIpAddressResolver())
     .UseGrpcMicroserviceAddressResolver(
@@ -39,7 +39,7 @@ Use one common resolver when a library should provide protocol-specific defaults
 that an application can replace with a single common override:
 
 ```csharp
-builder.Host.UseMicroserviceAddressResolver(
+builder.Services.UseMicroserviceAddressResolver(
     new ProtocolMicroserviceAddressResolver(
         httpResolver: new KubernetesClusterIpAddressResolver(),
         grpcResolver: new KubernetesServiceDiscoveryAddressResolver()));
@@ -48,6 +48,17 @@ builder.Host.UseMicroserviceAddressResolver(
 A library that provides a fallback policy can call `TryUseMicroserviceAddressResolver`
 instead: it selects the default resolver only when none was selected before, so an
 earlier application selection is preserved.
+
+Registrations are observed by the address provider when a client resolves an address,
+so the last registration for a scope always wins. In console and worker applications
+that build the host with a fluent chain, register resolvers inside `ConfigureServices`
+to observe the final host configuration and environment:
+
+```csharp
+Host.CreateDefaultBuilder(args)
+    .ConfigureServices((context, services) => services.UseMicroserviceAddressResolver(
+        new ProductAddressResolver(context.Configuration)));
+```
 
 Resolve an address from another library or application component:
 
@@ -87,10 +98,9 @@ public sealed class ProductAddressResolver : IMicroserviceAddressResolver
     }
 }
 
-builder.Host.UseHttpMicroserviceAddressResolver(
+builder.Services.UseHttpMicroserviceAddressResolver(
     new ProductAddressResolver());
 ```
 
-The default, HTTP, and gRPC resolvers can be registered as an instance or as a
-factory using the final `HostBuilderContext`. The selected resolver instance is
-shared by client registration and the runtime `IMicroserviceAddressProvider`.
+The selected resolver instance is shared by client registration and the runtime
+`IMicroserviceAddressProvider`.

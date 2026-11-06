@@ -4,7 +4,6 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Monq.Core.MicroserviceAddressing.Addressing;
 using Monq.Core.MicroserviceAddressing.DependencyInjection;
-using Monq.Core.MicroserviceAddressing.Hosting;
 
 namespace Monq.Core.MicroserviceAddressing.Tests;
 
@@ -26,13 +25,14 @@ public class MicroserviceAddressProviderTests
     [Fact]
     public void ProtocolResolver_OverridesDefaultResolver()
     {
-        using var host = new HostBuilder()
-            .UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://default.example")))
-            .UseGrpcMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://grpc.example")))
-            .Build();
-        var provider = host.Services.GetRequiredService<IMicroserviceAddressProvider>();
+        var services = CreateServices();
+        services.UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://default.example")));
+        services.UseGrpcMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://grpc.example")));
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = serviceProvider.GetRequiredService<IMicroserviceAddressProvider>();
 
         var http = provider.Resolve("orders-service", MicroserviceProtocol.Http);
         var grpc = provider.Resolve("orders-service", MicroserviceProtocol.Grpc);
@@ -44,13 +44,14 @@ public class MicroserviceAddressProviderTests
     [Fact]
     public void ClientResolver_OverridesProtocolAndDefaultResolvers()
     {
-        using var host = new HostBuilder()
-            .UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://default.example")))
-            .UseHttpMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://http.example")))
-            .Build();
-        var provider = host.Services.GetRequiredService<IMicroserviceAddressProvider>();
+        var services = CreateServices();
+        services.UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://default.example")));
+        services.UseHttpMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://http.example")));
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = serviceProvider.GetRequiredService<IMicroserviceAddressProvider>();
 
         var result = provider.Resolve(
             "orders-service",
@@ -64,13 +65,14 @@ public class MicroserviceAddressProviderTests
     [Fact]
     public void LastProtocolRegistrationWins()
     {
-        using var host = new HostBuilder()
-            .UseHttpMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://first.example")))
-            .UseHttpMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://second.example")))
-            .Build();
-        var provider = host.Services.GetRequiredService<IMicroserviceAddressProvider>();
+        var services = CreateServices();
+        services.UseHttpMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://first.example")));
+        services.UseHttpMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://second.example")));
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = serviceProvider.GetRequiredService<IMicroserviceAddressProvider>();
 
         var result = provider.Resolve("orders-service", MicroserviceProtocol.Http);
 
@@ -80,17 +82,47 @@ public class MicroserviceAddressProviderTests
     [Fact]
     public void LastGrpcRegistrationWins()
     {
-        using var host = new HostBuilder()
-            .UseGrpcMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://first.example")))
-            .UseGrpcMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://second.example")))
-            .Build();
-        var provider = host.Services.GetRequiredService<IMicroserviceAddressProvider>();
+        var services = CreateServices();
+        services.UseGrpcMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://first.example")));
+        services.UseGrpcMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://second.example")));
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = serviceProvider.GetRequiredService<IMicroserviceAddressProvider>();
 
         var result = provider.Resolve("orders-service", MicroserviceProtocol.Grpc);
 
         Assert.Equal("https://second.example/", result.Address.AbsoluteUri);
+    }
+
+    [Fact]
+    public void LastDefaultRegistrationWins()
+    {
+        var services = CreateServices();
+        services.UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://first.example")));
+        services.UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://second.example")));
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = serviceProvider.GetRequiredService<IMicroserviceAddressProvider>();
+
+        var http = provider.Resolve("orders-service", MicroserviceProtocol.Http);
+        var grpc = provider.Resolve("orders-service", MicroserviceProtocol.Grpc);
+
+        Assert.Equal("https://second.example/", http.Address.AbsoluteUri);
+        Assert.Equal("https://second.example/", grpc.Address.AbsoluteUri);
+    }
+
+    [Fact]
+    public void Use_NullResolver_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => CreateServices().UseMicroserviceAddressResolver(null!));
+
+        Assert.Throws<ArgumentNullException>(
+            () => CreateServices().UseHttpMicroserviceAddressResolver(null!));
     }
 
     [Fact]
@@ -128,152 +160,56 @@ public class MicroserviceAddressProviderTests
     }
 
     [Fact]
-    public void HostExtension_ResolvesClientResolverOverProtocolAndDefault()
-    {
-        var hostBuilder = new HostBuilder()
-            .UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://default.example")))
-            .UseHttpMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://http.example")));
-
-        var result = hostBuilder.ResolveMicroserviceAddress(
-            CreateHostBuilderContext(),
-            "orders-service",
-            MicroserviceProtocol.Http,
-            addressResolver: new FixedMicroserviceAddressResolver(
-                new Uri("https://client.example")));
-
-        Assert.Equal("https://client.example/", result.Address.AbsoluteUri);
-    }
-
-    [Fact]
-    public void HostExtension_ThrowsOnUnsupportedProtocol()
-    {
-        var hostBuilder = new HostBuilder();
-
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            hostBuilder.ResolveMicroserviceAddress(
-                CreateHostBuilderContext(),
-                "orders-service",
-                (MicroserviceProtocol)99));
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void HostExtension_ThrowsOnEmptyApplicationName(string? applicationName)
-    {
-        var hostBuilder = new HostBuilder();
-
-        Assert.Throws<ArgumentException>(() =>
-            hostBuilder.ResolveMicroserviceAddress(
-                CreateHostBuilderContext(),
-                applicationName!,
-                MicroserviceProtocol.Http));
-    }
-
-    [Fact]
-    public void ResolverFactory_ReturningNull_ThrowsOnResolution()
-    {
-        var hostBuilder = new HostBuilder()
-            .UseMicroserviceAddressResolver(_ => null!);
-
-        Assert.Throws<InvalidOperationException>(() =>
-            hostBuilder.ResolveMicroserviceAddress(
-                CreateHostBuilderContext(),
-                "orders-service",
-                MicroserviceProtocol.Http));
-    }
-
-    [Fact]
-    public void HostExtension_ConcurrentResolution_InvokesFactoryOnce()
-    {
-        var invocationCount = 0;
-        var hostBuilder = new HostBuilder()
-            .UseGrpcMicroserviceAddressResolver(_ =>
-            {
-                Interlocked.Increment(ref invocationCount);
-                return new FixedMicroserviceAddressResolver(new Uri("https://grpc.example"));
-            });
-        var context = CreateHostBuilderContext();
-
-        Parallel.For(0, 32, _ =>
-        {
-            var result = hostBuilder.ResolveMicroserviceAddress(
-                context,
-                "orders-service",
-                MicroserviceProtocol.Grpc);
-            Assert.Equal("https://grpc.example/", result.Address.AbsoluteUri);
-        });
-
-        Assert.Equal(1, invocationCount);
-    }
-
-    [Fact]
-    public void LastDefaultRegistrationWins()
+    public void HostConfigureServices_RegistrationsAreObservedByProvider()
     {
         using var host = new HostBuilder()
-            .UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://first.example")))
-            .UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://second.example")))
+            .ConfigureServices((_, services) =>
+            {
+                services.UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+                    new Uri("https://default.example")));
+                services.UseGrpcMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+                    new Uri("https://grpc.example")));
+            })
             .Build();
         var provider = host.Services.GetRequiredService<IMicroserviceAddressProvider>();
 
         var http = provider.Resolve("orders-service", MicroserviceProtocol.Http);
         var grpc = provider.Resolve("orders-service", MicroserviceProtocol.Grpc);
 
-        Assert.Equal("https://second.example/", http.Address.AbsoluteUri);
-        Assert.Equal("https://second.example/", grpc.Address.AbsoluteUri);
+        Assert.Equal("https://default.example/", http.Address.AbsoluteUri);
+        Assert.Equal("https://grpc.example/", grpc.Address.AbsoluteUri);
     }
 
     [Fact]
-    public void TryUse_SetsDefaultResolverWhenNoneSelected()
+    public void ServicesTryUse_SkipsWhenDefaultAlreadyRegistered()
     {
-        using var host = new HostBuilder()
-            .TryUseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://fallback.example")))
-            .Build();
-        var provider = host.Services.GetRequiredService<IMicroserviceAddressProvider>();
+        var services = CreateServices();
+        services.UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://application.example")));
 
-        var result = provider.Resolve("orders-service", MicroserviceProtocol.Http);
+        services.TryUseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://fallback.example")));
 
-        Assert.Equal("https://fallback.example/", result.Address.AbsoluteUri);
-    }
-
-    [Fact]
-    public void TryUse_DoesNotReplaceEarlierDefaultResolver()
-    {
-        var factoryInvocationCount = 0;
-        using var host = new HostBuilder()
-            .UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://application.example")))
-            .TryUseMicroserviceAddressResolver(_ =>
-            {
-                factoryInvocationCount++;
-                return new FixedMicroserviceAddressResolver(
-                    new Uri("https://fallback.example"));
-            })
-            .Build();
-        var provider = host.Services.GetRequiredService<IMicroserviceAddressProvider>();
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = serviceProvider.GetRequiredService<IMicroserviceAddressProvider>();
 
         var result = provider.Resolve("orders-service", MicroserviceProtocol.Http);
 
         Assert.Equal("https://application.example/", result.Address.AbsoluteUri);
-        Assert.Equal(0, factoryInvocationCount);
     }
 
     [Fact]
-    public void UseAfterTryUse_OverridesFallbackResolver()
+    public void ServicesUse_AfterServicesTryUse_OverridesFallback()
     {
-        using var host = new HostBuilder()
-            .TryUseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://fallback.example")))
-            .UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://application.example")))
-            .Build();
-        var provider = host.Services.GetRequiredService<IMicroserviceAddressProvider>();
+        var services = CreateServices();
+        services.TryUseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://fallback.example")));
+
+        services.UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://application.example")));
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = serviceProvider.GetRequiredService<IMicroserviceAddressProvider>();
 
         var result = provider.Resolve("orders-service", MicroserviceProtocol.Grpc);
 
@@ -281,64 +217,18 @@ public class MicroserviceAddressProviderTests
     }
 
     [Fact]
-    public void HostResolverSelection_IsSharedWithDependencyInjectionProvider()
+    public void TryUse_SetsDefaultResolverWhenNoneSelected()
     {
-        ResolvedMicroserviceAddress? registrationAddress = null;
-        var hostBuilder = new HostBuilder()
-            .UseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://default.example")))
-            .UseGrpcMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
-                new Uri("https://grpc.example")));
+        var services = CreateServices();
+        services.TryUseMicroserviceAddressResolver(new FixedMicroserviceAddressResolver(
+            new Uri("https://fallback.example")));
 
-        hostBuilder.ConfigureServices((context, _) =>
-        {
-            registrationAddress = hostBuilder
-                .ResolveMicroserviceAddress(
-                    context,
-                    "orders-service",
-                    MicroserviceProtocol.Grpc);
-        });
+        using var serviceProvider = services.BuildServiceProvider();
+        var provider = serviceProvider.GetRequiredService<IMicroserviceAddressProvider>();
 
-        using var host = hostBuilder.Build();
-        var runtimeAddress = host.Services
-            .GetRequiredService<IMicroserviceAddressProvider>()
-            .Resolve("orders-service", MicroserviceProtocol.Grpc);
+        var result = provider.Resolve("orders-service", MicroserviceProtocol.Http);
 
-        Assert.NotNull(registrationAddress);
-        Assert.Equal("https://grpc.example/", registrationAddress.Address.AbsoluteUri);
-        Assert.Equal(registrationAddress, runtimeAddress);
-    }
-
-    [Fact]
-    public void ResolverFactory_IsInvokedOnceForRegistrationAndRuntimeResolution()
-    {
-        var invocationCount = 0;
-        var resolver = new FixedMicroserviceAddressResolver(
-            new Uri("https://http.example"));
-        ResolvedMicroserviceAddress? registrationAddress = null;
-        var hostBuilder = new HostBuilder()
-            .UseHttpMicroserviceAddressResolver(_ =>
-            {
-                invocationCount++;
-                return resolver;
-            });
-
-        hostBuilder.ConfigureServices((context, _) =>
-        {
-            registrationAddress = hostBuilder.ResolveMicroserviceAddress(
-                context,
-                "orders-service",
-                MicroserviceProtocol.Http);
-        });
-
-        using var host = hostBuilder.Build();
-        var runtimeAddress = host.Services
-            .GetRequiredService<IMicroserviceAddressProvider>()
-            .Resolve("orders-service", MicroserviceProtocol.Http);
-
-        Assert.Equal(1, invocationCount);
-        Assert.NotNull(registrationAddress);
-        Assert.Equal(registrationAddress, runtimeAddress);
+        Assert.Equal("https://fallback.example/", result.Address.AbsoluteUri);
     }
 
     static ServiceCollection CreateServices()
@@ -349,13 +239,6 @@ public class MicroserviceAddressProviderTests
         services.AddMicroserviceAddressing();
         return services;
     }
-
-    static HostBuilderContext CreateHostBuilderContext() =>
-        new(new Dictionary<object, object>())
-        {
-            Configuration = new ConfigurationBuilder().Build(),
-            HostingEnvironment = new TestHostEnvironment("Integration"),
-        };
 
     sealed class TestHostEnvironment : IHostEnvironment
     {
