@@ -80,6 +80,21 @@ Resolver precedence is:
 3. Default resolver.
 4. Built-in Kubernetes ClusterIP resolver.
 
+Client registration code that must know the endpoint resolution mode before the
+service provider is built can peek at it from the service collection:
+
+```csharp
+EndpointResolutionMode? mode = builder.Services.TryPeekEndpointResolutionMode(
+    applicationName,
+    MicroserviceProtocol.Http);
+```
+
+The peek applies the same precedence as the provider. Configuration and environment
+are taken from the registered descriptors, and the result is `null` when either is
+missing or when the selected resolver fails. Because peeking invokes the resolver in
+addition to the runtime resolution, resolvers must be side-effect free and must not
+resolve application services to compute the mode.
+
 ## Custom policy
 
 Implement `IMicroserviceAddressResolver` and replace only the required scope:
