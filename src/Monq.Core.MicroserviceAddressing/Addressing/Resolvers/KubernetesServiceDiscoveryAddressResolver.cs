@@ -3,6 +3,10 @@ namespace Monq.Core.MicroserviceAddressing.Addressing;
 /// <summary>
 /// Resolves addresses of Kubernetes headless Services for client-side endpoint discovery.
 /// </summary>
+/// <remarks>
+/// The namespace is derived from <c>IHostEnvironment.EnvironmentName</c> and can be overridden
+/// with the <c>ASPNETCORE_URL_NAMESPACE</c> environment variable.
+/// </remarks>
 public sealed class KubernetesServiceDiscoveryAddressResolver : IMicroserviceAddressResolver
 {
     /// <inheritdoc />
@@ -14,7 +18,7 @@ public sealed class KubernetesServiceDiscoveryAddressResolver : IMicroserviceAdd
                 "The target application name cannot be empty.",
                 nameof(context.TargetApplicationName));
 
-        var namespaceName = context.Environment.EnvironmentName.ToLowerInvariant();
+        var namespaceName = KubernetesNamespaceProvider.GetNamespaceName(context);
         var address = context.Protocol switch
         {
             MicroserviceProtocol.Http => new Uri(

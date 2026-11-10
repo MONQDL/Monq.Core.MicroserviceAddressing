@@ -3,6 +3,10 @@ namespace Monq.Core.MicroserviceAddressing.Addressing;
 /// <summary>
 /// Resolves addresses of regular Kubernetes ClusterIP Services.
 /// </summary>
+/// <remarks>
+/// The namespace is derived from <c>IHostEnvironment.EnvironmentName</c> and can be overridden
+/// with the <c>ASPNETCORE_URL_NAMESPACE</c> environment variable.
+/// </remarks>
 public sealed class KubernetesClusterIpAddressResolver : IMicroserviceAddressResolver
 {
     /// <inheritdoc />
@@ -14,7 +18,7 @@ public sealed class KubernetesClusterIpAddressResolver : IMicroserviceAddressRes
                 "The target application name cannot be empty.",
                 nameof(context.TargetApplicationName));
 
-        var namespaceName = context.Environment.EnvironmentName.ToLowerInvariant();
+        var namespaceName = KubernetesNamespaceProvider.GetNamespaceName(context);
         var port = context.PortOverride ?? context.Protocol switch
         {
             MicroserviceProtocol.Http => 80,

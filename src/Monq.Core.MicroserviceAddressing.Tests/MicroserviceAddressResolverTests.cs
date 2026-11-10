@@ -57,6 +57,53 @@ public class MicroserviceAddressResolverTests
     }
 
     [Theory]
+    [InlineData("integration-shard")]
+    [InlineData("Integration-Shard ")]
+    public void KubernetesResolvers_UseNamespaceFromEnvironmentVariable(string configuredNamespace)
+    {
+        try
+        {
+            Environment.SetEnvironmentVariable("ASPNETCORE_URL_NAMESPACE", configuredNamespace);
+
+            var clusterIp = new KubernetesClusterIpAddressResolver()
+                .Resolve(CreateContext("orders-service", MicroserviceProtocol.Http));
+            var discovery = new KubernetesServiceDiscoveryAddressResolver()
+                .Resolve(CreateContext("orders-service", MicroserviceProtocol.Http));
+
+            Assert.Equal(
+                "orders-service.integration-shard.svc.cluster.local",
+                clusterIp.Address.Host);
+            Assert.Equal(
+                "orders-service-http.integration-shard.svc.cluster.local",
+                discovery.Address.Host);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ASPNETCORE_URL_NAMESPACE", null);
+        }
+    }
+
+    [Fact]
+    public void KubernetesResolvers_FallBackToEnvironmentNameWhenVariableIsEmpty()
+    {
+        try
+        {
+            Environment.SetEnvironmentVariable("ASPNETCORE_URL_NAMESPACE", "   ");
+
+            var result = new KubernetesClusterIpAddressResolver()
+                .Resolve(CreateContext("orders-service", MicroserviceProtocol.Http));
+
+            Assert.Equal(
+                "orders-service.integration.svc.cluster.local",
+                result.Address.Host);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ASPNETCORE_URL_NAMESPACE", null);
+        }
+    }
+
+    [Theory]
     [InlineData(MicroserviceProtocol.Http, "https://http.example.com/")]
     [InlineData(MicroserviceProtocol.Grpc, "https://grpc.example.com/")]
     public void ProtocolResolver_UsesResolverForRequestedProtocol(

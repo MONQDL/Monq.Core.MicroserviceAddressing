@@ -15,7 +15,8 @@ libraries.
 | Fixed | The supplied absolute URI | The supplied absolute URI |
 
 The namespace is derived from `IHostEnvironment.EnvironmentName` and normalized to
-lowercase. Pass a port to override a strategy default.
+lowercase. Set the `ASPNETCORE_URL_NAMESPACE` environment variable to use an explicit
+namespace instead of the environment name. Pass a port to override a strategy default.
 
 ## Registration
 
