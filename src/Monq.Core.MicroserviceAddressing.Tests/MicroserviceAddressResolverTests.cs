@@ -56,14 +56,14 @@ public class MicroserviceAddressResolverTests
         Assert.Equal(8080, result.Address.Port);
     }
 
-    [Theory]
-    [InlineData("integration-shard")]
-    [InlineData("Integration-Shard ")]
-    public void KubernetesResolvers_UseNamespaceFromEnvironmentVariable(string configuredNamespace)
+    [Fact]
+    public void KubernetesResolvers_UseNamespaceFromEnvironmentVariable()
     {
         try
         {
-            Environment.SetEnvironmentVariable("ASPNETCORE_URL_NAMESPACE", configuredNamespace);
+            Environment.SetEnvironmentVariable(
+                AddressingConstants.KubernetesNamespaceEnvironmentVariable,
+                "integration-shard");
 
             var clusterIp = new KubernetesClusterIpAddressResolver()
                 .Resolve(CreateContext("orders-service", MicroserviceProtocol.Http));
@@ -79,7 +79,29 @@ public class MicroserviceAddressResolverTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("ASPNETCORE_URL_NAMESPACE", null);
+            Environment.SetEnvironmentVariable(AddressingConstants.KubernetesNamespaceEnvironmentVariable, null);
+        }
+    }
+
+    [Fact]
+    public void KubernetesResolvers_PreserveConfiguredNamespaceCase()
+    {
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                AddressingConstants.KubernetesNamespaceEnvironmentVariable,
+                " Integration-Shard ");
+
+            var result = new KubernetesServiceDiscoveryAddressResolver()
+                .Resolve(CreateContext("orders-service", MicroserviceProtocol.Grpc));
+
+            Assert.Equal(
+                "dns:///orders-service-grpc.Integration-Shard.svc.cluster.local:5006",
+                result.Address.AbsoluteUri);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(AddressingConstants.KubernetesNamespaceEnvironmentVariable, null);
         }
     }
 
@@ -88,7 +110,9 @@ public class MicroserviceAddressResolverTests
     {
         try
         {
-            Environment.SetEnvironmentVariable("ASPNETCORE_URL_NAMESPACE", "   ");
+            Environment.SetEnvironmentVariable(
+                AddressingConstants.KubernetesNamespaceEnvironmentVariable,
+                "   ");
 
             var result = new KubernetesClusterIpAddressResolver()
                 .Resolve(CreateContext("orders-service", MicroserviceProtocol.Http));
@@ -99,7 +123,7 @@ public class MicroserviceAddressResolverTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("ASPNETCORE_URL_NAMESPACE", null);
+            Environment.SetEnvironmentVariable(AddressingConstants.KubernetesNamespaceEnvironmentVariable, null);
         }
     }
 
